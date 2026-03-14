@@ -84,6 +84,8 @@ export default function SettingsPage() {
   const [savingInvite, setSavingInvite] = useState(false);
   const [inviteResult, setInviteResult] = useState<InviteToken | null>(null);
   const [inviteLink, setInviteLink] = useState("");
+  const [tavilyHasKey, setTavilyHasKey] = useState(false);
+  const [tavilyTail, setTavilyTail] = useState<string | null>(null);
 
   const isTenantAdmin = user?.role === "tenant_admin";
   const isPersonal = Boolean(user?.is_personal);
@@ -116,6 +118,9 @@ export default function SettingsPage() {
       const [providerPayload, keysPayload] = await Promise.all([getTenantProvider(token), getTenantKeys(token)]);
       setProvider(providerPayload);
       setKeys(keysPayload.items || []);
+      const tavily = (keysPayload.items || []).find((item) => item.provider === "tavily");
+      setTavilyHasKey(Boolean(tavily?.has_key));
+      setTavilyTail(tavily?.api_key_tail || null);
       setProviderName(providerPayload.provider && providerPayload.provider !== "none" ? providerPayload.provider : "gemini");
       setModel(providerPayload.model || "");
       setBaseUrl(providerPayload.base_url || "");
@@ -373,7 +378,7 @@ export default function SettingsPage() {
                 onSubmit={saveTavilyKey}
                 className="grid gap-3 rounded-2xl border border-amber-100 bg-amber-50/70 p-3.5 lg:grid-cols-4"
               >
-                <div className="lg:col-span-3">
+                <div className="lg:col-span-3 space-y-1">
                   <Input
                     placeholder="Tavily API key"
                     type="password"
@@ -381,15 +386,15 @@ export default function SettingsPage() {
                     onChange={(event) => setTavilyApiKey(event.target.value)}
                     required
                   />
+                  <p className="text-xs text-amber-700">
+                    {tavilyHasKey ? `Saved (tail ${tavilyTail || "hidden"})` : "Not set; will fall back to server key if configured."}
+                  </p>
                 </div>
                 <div className="lg:col-span-1">
                   <Button type="submit" disabled={savingTavilyKey} className="w-full">
                     {savingTavilyKey ? "Saving..." : "Save Tavily Key"}
                   </Button>
                 </div>
-                <p className="lg:col-span-4 text-xs text-amber-700">
-                  Optional: use a tenant-specific Tavily key for grounded web search; falls back to the server key if not set.
-                </p>
               </form>
 
               <div className="space-y-2">
