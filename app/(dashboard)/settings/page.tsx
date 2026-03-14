@@ -17,10 +17,11 @@ import {
   getTenantPolicy,
   getTenantProvider,
   getUsageSummary,
+  createInvite,
   upsertTenantKey,
   updateTenantPolicy,
 } from "@/lib/api";
-import type { TenantKeyItem, TenantPolicy, TenantProviderConfig, UsageSummary } from "@/types/api";
+import type { InviteToken, TenantKeyItem, TenantPolicy, TenantProviderConfig, UsageSummary } from "@/types/api";
 
 const PROVIDERS = ["gemini", "openai", "groq", "anthropic"];
 
@@ -72,7 +73,17 @@ export default function SettingsPage() {
   const [model, setModel] = useState("");
   const [baseUrl, setBaseUrl] = useState("");
   const [savingKey, setSavingKey] = useState(false);
+  const [tavilyApiKey, setTavilyApiKey] = useState("");
+  const [savingTavilyKey, setSavingTavilyKey] = useState(false);
   const [savingPolicy, setSavingPolicy] = useState(false);
+  const [inviteEmail, setInviteEmail] = useState("");
+  const [inviteRole, setInviteRole] = useState("employee");
+  const [inviteType, setInviteType] = useState<"single" | "multi">("single");
+  const [inviteHours, setInviteHours] = useState(72);
+  const [inviteMaxUses, setInviteMaxUses] = useState(5);
+  const [savingInvite, setSavingInvite] = useState(false);
+  const [inviteResult, setInviteResult] = useState<InviteToken | null>(null);
+  const [inviteLink, setInviteLink] = useState("");
 
   const isTenantAdmin = user?.role === "tenant_admin";
   const isPersonal = Boolean(user?.is_personal);
@@ -162,6 +173,27 @@ export default function SettingsPage() {
     }
   };
 
+  const saveTavilyKey = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!token) {
+      return;
+    }
+    setSavingTavilyKey(true);
+    setError("");
+    try {
+      await upsertTenantKey(token, {
+        provider: "tavily",
+        api_key: tavilyApiKey,
+      });
+      setTavilyApiKey("");
+      await load();
+    } catch (err) {
+      setError(toMessage(err));
+    } finally {
+      setSavingTavilyKey(false);
+    }
+  };
+
   const removeKey = async (providerToDelete: string) => {
     if (!token) {
       return;
@@ -188,6 +220,36 @@ export default function SettingsPage() {
       setError(toMessage(err));
     } finally {
       setSavingPolicy(false);
+    }
+  };
+
+  const saveInvite = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!token || !isTenantAdmin || isPersonal) {
+      return;
+    }
+    setSavingInvite(true);
+    setError("");
+    setInviteResult(null);
+    setInviteLink("");
+    try {
+      const payload = {
+        email: inviteEmail.trim() || null,
+        role: inviteRole,
+        expires_hours: inviteHours,
+        max_uses: inviteType === "multi" ? inviteMaxUses : null,
+      };
+      const created = await createInvite(token, payload);
+      setInviteResult(created);
+      const origin = typeof window !== "undefined" ? window.location.origin : "";
+      if (origin && created.token) {
+        setInviteLink(`${origin}/signup/invite?token=${created.token}`);
+      }
+      setInviteEmail("");
+    } catch (err) {
+      setError(toMessage(err));
+    } finally {
+      setSavingInvite(false);
     }
   };
 
@@ -307,6 +369,29 @@ export default function SettingsPage() {
                 </div>
               </form>
 
+              <form
+                onSubmit={saveTavilyKey}
+                className="grid gap-3 rounded-2xl border border-amber-100 bg-amber-50/70 p-3.5 lg:grid-cols-4"
+              >
+                <div className="lg:col-span-3">
+                  <Input
+                    placeholder="Tavily API key"
+                    type="password"
+                    value={tavilyApiKey}
+                    onChange={(event) => setTavilyApiKey(event.target.value)}
+                    required
+                  />
+                </div>
+                <div className="lg:col-span-1">
+                  <Button type="submit" disabled={savingTavilyKey} className="w-full">
+                    {savingTavilyKey ? "Saving..." : "Save Tavily Key"}
+                  </Button>
+                </div>
+                <p className="lg:col-span-4 text-xs text-amber-700">
+                  Optional: use a tenant-specific Tavily key for grounded web search; falls back to the server key if not set.
+                </p>
+              </form>
+
               <div className="space-y-2">
                 <p className="text-sm font-medium text-slate-700">Stored Keys</p>
                 {!keys.length ? (
@@ -333,6 +418,98 @@ export default function SettingsPage() {
                   </div>
                 )}
               </div>
+            </CardContent>
+          </Card>
+
+          <Card className="stagger-item">
+            <CardHeader className="border-b border-slate-200/70 bg-[linear-gradient(180deg,#ffffff_0%,#f7fbff_100%)]">
+              <div>
+                <CardTitle>Employee Invites</CardTitle>
+                <CardDescription>Create invite tokens for employees to join this workspace.</CardDescription>
+              </div>
+            </CardHeader>
+            <CardContent className="space-y-4 pt-5">
+              <form
+                onSubmit={saveInvite}
+                className="grid gap-3 rounded-2xl border border-slate-200/90 bg-slate-50/80 p-3.5 lg:grid-cols-5"
+              >
+                <Input
+                  placeholder="Employee email (optional)"
+                  type="email"
+                  value={inviteEmail}
+                  onChange={(event) => setInviteEmail(event.target.value)}
+                  className="lg:col-span-2"
+                />
+                <select
+                  value={inviteRole}
+                  onChange={(event) => setInviteRole(event.target.value)}
+                  className="select-input"
+                >
+                  <option value="employee">employee</option>
+                  <option value="tenant_admin">tenant_admin</option>
+                </select>
+                <select
+                  value={inviteType}
+                  onChange={(event) => setInviteType(event.target.value as "single" | "multi")}
+                  className="select-input"
+                >
+                  <option value="single">Single-use</option>
+                  <option value="multi">Multi-use</option>
+                </select>
+                <Input
+                  type="number"
+                  min={1}
+                  value={inviteHours}
+                  onChange={(event) => setInviteHours(Number(event.target.value))}
+                  placeholder="Expires in hours"
+                />
+                {inviteType === "multi" ? (
+                  <Input
+                    type="number"
+                    min={1}
+                    value={inviteMaxUses}
+                    onChange={(event) => setInviteMaxUses(Number(event.target.value))}
+                    placeholder="Max uses"
+                  />
+                ) : (
+                  <div className="hidden lg:block" />
+                )}
+                <div className="lg:col-span-5">
+                  <Button type="submit" disabled={savingInvite}>
+                    {savingInvite ? "Creating invite..." : "Create Invite"}
+                  </Button>
+                </div>
+              </form>
+
+              {inviteResult ? (
+                <div className="space-y-2 rounded-2xl border border-emerald-200 bg-emerald-50 p-3.5">
+                  <p className="text-sm font-semibold text-emerald-800">Invite created</p>
+                  <p className="text-xs text-emerald-700">Token (share securely):</p>
+                  <code className="block rounded border border-emerald-200 bg-white px-3 py-2 text-sm text-emerald-900">
+                    {inviteResult.token}
+                  </code>
+                  {inviteLink ? (
+                    <div className="space-y-1">
+                      <p className="text-xs text-emerald-700">Invite link:</p>
+                      <code className="block rounded border border-emerald-200 bg-white px-3 py-2 text-sm text-emerald-900">
+                        {inviteLink}
+                      </code>
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="secondary"
+                        onClick={() => inviteLink && navigator.clipboard?.writeText(inviteLink)}
+                      >
+                        Copy invite link
+                      </Button>
+                    </div>
+                  ) : null}
+                  <p className="text-xs text-emerald-700">
+                    Role: {inviteResult.role}; Expires: {inviteResult.expires_at}
+                    {inviteResult.max_uses ? `; Max uses: ${inviteResult.max_uses}` : "; Single-use"}
+                  </p>
+                </div>
+              ) : null}
             </CardContent>
           </Card>
 

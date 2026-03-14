@@ -187,6 +187,16 @@ export type TenantKeysResponse = {
   items: TenantKeyItem[];
 };
 
+export type InviteToken = {
+  tenant_id: number;
+  token: string;
+  email: string | null;
+  role: string;
+  expires_at: string;
+  max_uses: number | null;
+  uses_count: number;
+};
+
 export type UsageSummary = {
   tenant_id: number;
   daily_requests_limit: number;

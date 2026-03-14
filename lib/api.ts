@@ -5,6 +5,7 @@ import type {
   ChatRequest,
   ChatResponse,
   FileScanResponse,
+  InviteToken,
   MeResponse,
   OnboardingBootstrapResponse,
   OnboardingStatusResponse,
@@ -220,6 +221,17 @@ export async function deleteTenantKey(token: string, provider: string): Promise<
   return request<{ ok: boolean }>(`/tenant/keys/${provider}`, {
     method: "DELETE",
     token,
+  });
+}
+
+export async function createInvite(
+  token: string,
+  payload: { email?: string | null; role: string; expires_hours: number; max_uses?: number | null },
+): Promise<{ ok: boolean } & InviteToken> {
+  return request<{ ok: boolean } & InviteToken>("/tenant/admin/invite", {
+    method: "POST",
+    token,
+    body: payload,
   });
 }
 
