@@ -8,8 +8,14 @@ export function detailMessage(detail: unknown, fallback: string): string {
     if ("message" in detail && typeof (detail as { message?: unknown }).message === "string") {
       return String((detail as { message: string }).message);
     }
-    if ("detail" in detail && typeof (detail as { detail?: unknown }).detail === "string") {
-      return String((detail as { detail: string }).detail);
+    if ("detail" in detail) {
+      return detailMessage((detail as { detail?: unknown }).detail, fallback);
+    }
+    if ("error" in detail) {
+      return detailMessage((detail as { error?: unknown }).error, fallback);
+    }
+    if ("raw_error_json" in detail) {
+      return detailMessage((detail as { raw_error_json?: unknown }).raw_error_json, fallback);
     }
   }
   return fallback;

@@ -11,29 +11,12 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Textarea } from "@/components/ui/textarea";
 import { useChatHistory } from "@/components/providers/chat-history-provider";
 import { useAuth } from "@/hooks/use-auth";
-import { ApiError, scanFile, sendChat } from "@/lib/api";
+import { scanFile, sendChat } from "@/lib/api";
 import { ChatMessageRecord } from "@/lib/chat-history";
+import { errorMessage } from "@/lib/error-utils";
 import type { FileScanResponse } from "@/types/api";
 
 const CHAT_UPLOAD_ACCEPT = ".txt,.md,.csv,.json,.pdf,.docx";
-
-function safeErrorMessage(err: unknown): string {
-  if (err instanceof ApiError) {
-    if (typeof err.detail === "string") {
-      return err.detail;
-    }
-    if (err.detail && typeof err.detail === "object" && "message" in err.detail) {
-      const message = (err.detail as { message?: unknown }).message;
-      if (typeof message === "string") {
-        return message;
-      }
-    }
-  }
-  if (err instanceof Error) {
-    return err.message;
-  }
-  return "Request failed.";
-}
 
 function formatFileSize(sizeBytes: number): string {
   const value = Math.max(0, Number(sizeBytes) || 0);
@@ -119,7 +102,7 @@ export default function ChatPage() {
         try {
           scanResult = await scanFile(token, pendingAttachment, "next_chat_attachment");
         } catch (scanErr) {
-          const message = safeErrorMessage(scanErr);
+          const message = errorMessage(scanErr, "Attachment scan failed.");
           appendMessage(chatId, {
             id: crypto.randomUUID(),
             role: "assistant",
@@ -169,15 +152,16 @@ export default function ChatPage() {
       };
       appendMessage(chatId, assistant);
     } catch (err) {
+      const message = errorMessage(err, "Request failed.");
       const assistant: ChatMessageRecord = {
         id: crypto.randomUUID(),
         role: "assistant",
-        content: safeErrorMessage(err),
+        content: message,
         status: "error",
         createdAt: Date.now(),
       };
       appendMessage(chatId, assistant);
-      setError(safeErrorMessage(err));
+      setError(message);
     } finally {
       setSending(false);
     }

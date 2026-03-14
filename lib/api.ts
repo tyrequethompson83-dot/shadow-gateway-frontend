@@ -14,7 +14,11 @@ import type {
   UsageSummary,
 } from "@/types/api";
 
-const API_BASE_URL = (process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://127.0.0.1:8080").replace(/\/$/, "");
+const API_BASE_URL = `${process.env.NEXT_PUBLIC_API_BASE_URL}`.replace(/\/$/, "");
+
+if (!process.env.NEXT_PUBLIC_API_BASE_URL || API_BASE_URL === "undefined") {
+  throw new Error("NEXT_PUBLIC_API_BASE_URL is not set.");
+}
 
 export class ApiError extends Error {
   status: number;
@@ -45,12 +49,22 @@ function buildHeaders(token?: string, body?: unknown): HeadersInit {
 }
 
 async function parseResponse(res: Response): Promise<unknown> {
-  const contentType = res.headers.get("content-type") ?? "";
-  if (contentType.includes("application/json")) {
-    return res.json();
-  }
   const text = await res.text();
-  return text || null;
+  if (!text) {
+    return null;
+  }
+
+  const contentType = res.headers.get("content-type") ?? "";
+  const trimmed = text.trim();
+  if (contentType.includes("application/json") || trimmed.startsWith("{") || trimmed.startsWith("[")) {
+    try {
+      return JSON.parse(trimmed);
+    } catch {
+      // Fall through to the raw text body if the upstream response lied about content type.
+    }
+  }
+
+  return trimmed;
 }
 
 async function request<T>(path: string, options: RequestOptions = {}): Promise<T> {
